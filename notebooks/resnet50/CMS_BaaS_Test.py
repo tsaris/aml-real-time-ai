@@ -30,7 +30,9 @@ def load_graph(frozen_graph_filename):
 	return graph, graph_def
 
 def printDeltaTime(text,time0):
-	print("\t ++ ",text,": ", (time.time() - time0))
+	curtime = time.time()*1000
+	print("\t ++ ",text,": ", (curtime - time0))
+	return curtime
 
 ## ---------------------------------------------------------------
 
@@ -108,9 +110,11 @@ def main():
 		
 		classes_entries = requests.get("https://raw.githubusercontent.com/Lasagne/Recipes/master/examples/resnet50/imagenet_classes.txt").text.splitlines()
 
-		#image_file = 'jet_image.jpg'
-		image_file = 'American_bison_k5680-1.jpg'
+		image_file = 'jet_image.jpg'
+		# image_file = 'American_bison_k5680-1.jpg'
+		time_bt0 = printDeltaTime("Brainwave Time Before",time0)
 		results = client.score_image(image_file)
+		time_bt1 = printDeltaTime("Brainwave Delta(Time) After",time_bt0)
 
 		# map results [class_id] => [confidence]
 		results = enumerate(results)
@@ -124,13 +128,20 @@ def main():
 	############# standalone tf #############
 	if standaloneTF:
 
+		time0tf = time.time()*1000
+
 		with open('American_bison_k5680-1.jpg', 'rb') as f:
 		# with open('jet_image.jpg', 'rb') as f:
 			data = f.read()
 			# print(data)
 			# local_image_tensors = resnet50.utils.preprocess_array(tf.constant(['jet_image.jpg']))
-			local_image_tensors = resnet50.utils.preprocess_array(tf.constant([data]))
-			
+			local_image_tensors = resnet50.utils.preprocess_array(tf.constant([data]))			
+			sess0 = tf.Session()
+			inputs = sess0.run(local_image_tensors)
+			print("local image tensor shape = ", local_image_tensors.shape)
+			print("inputs shape = ", inputs.shape)
+			printDeltaTime("Time for Preprocessing",time0tf)
+
 			# now get the featurizer pb file and load it into a graph
 			# in the setup above, you download a zip file with the pb files in it in ~/models
 			# unzip this file and then correct the path below
@@ -139,14 +150,17 @@ def main():
 			#for op in graph.get_operations(): print(op.name)
 			x = graph.get_tensor_by_name('prefix/InputImage:0')
 			y = graph.get_tensor_by_name('prefix/resnet_v1_50/pool5:0')
+			printDeltaTime("Time to load graph",time0tf)
 
-			sess = tf.Session()
-			result = sess.run(local_image_tensors)
-			print("local image tensor shape = ", local_image_tensors.shape)
-			print("result shape = ", result.shape)
-			print("y shape = ", y.shape)
-			print("x shape = ", x.shape)
-			result2 = sess.run(y, feed_dict = {x:result})
+			with tf.Session(graph=graph) as sess:
+				sess.run(tf.global_variables_initializer())
+				# sess = tf.Session()
+				# result = sess.run(local_image_tensors)
+				print("y shape = ", y.shape)
+				print("x shape = ", x.shape)
+				result = sess.run(y, feed_dict = {x:inputs})
+				printDeltaTime("Time to infer Resnet50 on CPU",time0tf)
+
 	############# standalone tf #############
 
 if __name__ == "__main__":
